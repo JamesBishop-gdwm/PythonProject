@@ -6,7 +6,7 @@ from tkinter import messagebox, ttk, simpledialog
 from PIL import Image, ImageTk
 from io import BytesIO
 
-TMDB_API_KEY = 'f0f356f9c383dc1097b9035f2431f4d0'  # Replace with your TMDB API key
+TMDB_API_KEY = ''  # Replace with your TMDB API key
 
 def get_tmdb_id(folder_name):
     url = f'https://api.themoviedb.org/3/search/tv?api_key={TMDB_API_KEY}&query={folder_name}'
@@ -56,7 +56,7 @@ class TMDBApp:
         self.label = tk.Label(self.root, text="Select the correct TMDB ID:", font=('Arial', 14))
         self.label.grid(row=1, column=0, pady=5, padx=5, sticky='ew')
 
-        self.tree = ttk.Treeview(self.root, columns=("Thumbnail", "Name"), show="tree")
+        self.tree = ttk.Treeview(self.root, columns=("Thumbnail", "Name", "Description"), show="tree")
         self.tree.grid(row=2, column=0, pady=5, padx=5, sticky='nsew')
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
@@ -109,7 +109,10 @@ class TMDBApp:
             if self.tmdb_results:
                 max_name_length = 0
                 for result in self.tmdb_results:
-                    display_text = f"{result['name']} ({result['id']})"
+                    description = result.get('overview', 'No description available.')
+                    if len(description) > 200:  # Limit the description length
+                        description = description[:197] + '...'
+                    display_text = f"{result['name']} ({result['id']})\n{description}"
                     max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
@@ -142,7 +145,10 @@ class TMDBApp:
             if self.tmdb_results:
                 max_name_length = 0
                 for result in self.tmdb_results:
-                    display_text = f"{result['name']} ({result['id']})"
+                    description = result.get('overview', 'No description available.')
+                    if len(description) > 200:  # Limit the description length
+                        description = description[:197] + '...'
+                    display_text = f"{result['name']} ({result['id']})\n{description}"
                     max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
@@ -168,8 +174,7 @@ class TMDBApp:
                 if result['id'] == int(item_id):
                     tmdb_id = result['id']
                     new_name = result['name']
-                    release_year = result.get('first_air_date', 'Unknown')[
-                                   :4] if 'first_air_date' in result else 'Unknown'
+                    release_year = result.get('first_air_date', 'Unknown')[:4] if 'first_air_date' in result else 'Unknown'
                     new_folder_path = rename_folder_with_tmdb_id(self.current_folder, new_name, release_year, tmdb_id)
                     mark_as_processed(self.processed_file, new_folder_path)
                     print(f"Folder renamed to: {new_folder_path}")  # Replace the messagebox with print
