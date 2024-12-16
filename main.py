@@ -47,29 +47,47 @@ class TMDBApp:
 
     def create_widgets(self):
         self.root.geometry("600x600")
+        self.root.grid_rowconfigure(2, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
 
-        self.folder_label = tk.Label(self.root, text="", font=('Arial', 14, 'bold'))
-        self.folder_label.pack(pady=10)
+        self.folder_label = tk.Label(self.root, text="", font=('Arial', 14, 'bold'), wraplength=500, justify="center")
+        self.folder_label.grid(row=0, column=0, pady=5, padx=5, sticky='ew')
 
         self.label = tk.Label(self.root, text="Select the correct TMDB ID:", font=('Arial', 14))
-        self.label.pack(pady=10)
+        self.label.grid(row=1, column=0, pady=5, padx=5, sticky='ew')
 
         self.tree = ttk.Treeview(self.root, columns=("Thumbnail", "Name"), show="tree")
-        self.tree.pack(pady=10, fill=tk.BOTH, expand=True)
+        self.tree.grid(row=2, column=0, pady=5, padx=5, sticky='nsew')
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
-        self.selection_button = tk.Button(self.root, text="Make Selection", command=self.make_selection, font=('Arial', 12))
-        self.selection_button.pack(pady=5)
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=80)  # Adjust the row height as needed
 
-        self.process_button = tk.Button(self.root, text="Mark as Processed", command=self.mark_processed, font=('Arial', 12))
-        self.process_button.pack(pady=5)
+        self.spinner = tk.Label(self.root, text="Loading...", font=('Arial', 14), fg="blue")
+        self.spinner.grid(row=3, column=0, pady=5, padx=5, sticky='ew')
 
-        self.skip_button = tk.Button(self.root, text="Skip", command=self.skip, font=('Arial', 12))
-        self.skip_button.pack(pady=5)
+        # Create a frame for the buttons
+        self.button_frame = tk.Frame(self.root)
+        self.button_frame.grid(row=4, column=0, pady=5, padx=5, sticky='ew')
 
-        self.manual_search_button = tk.Button(self.root, text="Manual Search", command=self.manual_search, font=('Arial', 12))
-        self.manual_search_button.pack(pady=5)
+        self.button_frame.grid_columnconfigure(0, weight=1)
+        self.button_frame.grid_columnconfigure(1, weight=1)
+        self.button_frame.grid_columnconfigure(2, weight=1)
+        self.button_frame.grid_columnconfigure(3, weight=1)
 
+        self.selection_button = tk.Button(self.button_frame, text="Make Selection", command=self.make_selection, font=('Arial', 12))
+        self.selection_button.grid(row=0, column=0, padx=5, sticky='ew')
+
+        self.process_button = tk.Button(self.button_frame, text="Mark as Processed", command=self.mark_processed, font=('Arial', 12))
+        self.process_button.grid(row=0, column=1, padx=5, sticky='ew')
+
+        self.skip_button = tk.Button(self.button_frame, text="Skip", command=self.skip, font=('Arial', 12))
+        self.skip_button.grid(row=0, column=2, padx=5, sticky='ew')
+
+        self.manual_search_button = tk.Button(self.button_frame, text="Manual Search", command=self.manual_search, font=('Arial', 12))
+        self.manual_search_button.grid(row=0, column=3, padx=5, sticky='ew')
+
+        self.spinner.grid_remove()  # Hide spinner initially
         self.next_folder()
 
     def on_select(self, event):
@@ -84,11 +102,15 @@ class TMDBApp:
         self.folder_label.config(text=f"Currently Processing: {os.path.basename(self.current_folder)}")
         if os.path.isdir(self.current_folder):
             folder_name = os.path.basename(self.current_folder)
+            self.start_loading()
             self.tmdb_results = get_tmdb_id(folder_name)
+            self.stop_loading()
             self.tree.delete(*self.tree.get_children())  # Clear the treeview
             if self.tmdb_results:
+                max_name_length = 0
                 for result in self.tmdb_results:
                     display_text = f"{result['name']} ({result['id']})"
+                    max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
                         response = requests.get(img_url)
@@ -100,15 +122,28 @@ class TMDBApp:
                         self.tree.insert("", "end", iid=result['id'], text=display_text, image=img_tk)
                     else:
                         self.tree.insert("", "end", iid=result['id'], text=display_text)
+                # Adjust column width based on the longest name
+                self.tree.column("#0", width=max_name_length * 10)
+
+    def start_loading(self):
+        self.spinner.grid()  # Show the spinner
+        self.root.update_idletasks()
+
+    def stop_loading(self):
+        self.spinner.grid_remove()  # Hide the spinner
 
     def manual_search(self):
         search_query = simpledialog.askstring("Manual Search", "Enter the name to search:")
         if search_query:
+            self.start_loading()
             self.tmdb_results = get_tmdb_id(search_query)
+            self.stop_loading()
             self.tree.delete(*self.tree.get_children())  # Clear the treeview
             if self.tmdb_results:
+                max_name_length = 0
                 for result in self.tmdb_results:
                     display_text = f"{result['name']} ({result['id']})"
+                    max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
                         response = requests.get(img_url)
@@ -120,6 +155,8 @@ class TMDBApp:
                         self.tree.insert("", "end", iid=result['id'], text=display_text, image=img_tk)
                     else:
                         self.tree.insert("", "end", iid=result['id'], text=display_text)
+                # Adjust column width based on the longest name
+                self.tree.column("#0", width=max_name_length * 10)
             else:
                 messagebox.showerror("Error", f"No TMDB ID found for '{search_query}'")
 
@@ -131,15 +168,18 @@ class TMDBApp:
                 if result['id'] == int(item_id):
                     tmdb_id = result['id']
                     new_name = result['name']
-                    release_year = result.get('first_air_date', 'Unknown')[:4] if 'first_air_date' in result else 'Unknown'
+                    release_year = result.get('first_air_date', 'Unknown')[
+                                   :4] if 'first_air_date' in result else 'Unknown'
                     new_folder_path = rename_folder_with_tmdb_id(self.current_folder, new_name, release_year, tmdb_id)
                     mark_as_processed(self.processed_file, new_folder_path)
-                    messagebox.showinfo("Success", f"Folder renamed to: {new_folder_path}")
+                    print(f"Folder renamed to: {new_folder_path}")  # Replace the messagebox with print
                     break
             self.tree.selection_remove(item_id)  # Clear selection after making a selection
             self.next_folder()
 
     def mark_processed(self):
+        if self.current_folder:
+            mark_as_processed(self.processed_file, self.current_folder)
         self.next_folder()
 
     def skip(self):
@@ -151,14 +191,24 @@ def select_folders():
         "D:/Media/Movies"
     ]
     processed_file = 'already_processed.csv'
+    processed_folders = set()
+
+    if os.path.isfile(processed_file):
+        with open(processed_file, mode='r', newline='') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                if row:
+                    processed_folders.add(row[0])
+
     folder_paths = []
     for folder_path in FOLDER_PATHS:
         if os.path.isdir(folder_path):
             for subfolder in os.listdir(folder_path):
                 subfolder_path = os.path.join(folder_path, subfolder)
-                if os.path.isdir(subfolder_path):
+                if os.path.isdir(subfolder_path) and subfolder_path not in processed_folders:
                     print(f"Adding folder for processing: {subfolder_path}")
                     folder_paths.append(subfolder_path)
+
     return folder_paths, processed_file
 
 if __name__ == "__main__":
