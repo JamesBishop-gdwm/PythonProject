@@ -6,15 +6,19 @@ from tkinter import messagebox, ttk, simpledialog
 from PIL import Image, ImageTk
 from io import BytesIO
 
-TMDB_API_KEY = 'f0f356f9c383dc1097b9035f2431f4d0'  # Replace with your TMDB API key
+TMDB_API_KEY = ''
 
-def get_tmdb_id(folder_name, search_type="tv"):
-    url = f'https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={folder_name}'
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        return data['results']
-    return None
+
+def get_tmdb_id(folder_name):
+    results = []
+    for search_type in ["tv", "movie"]:
+        url = f'https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={folder_name}'
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            results.extend(data['results'])
+    return results if results else None
+
 
 def sanitize_folder_name(name):
     # Remove illegal characters for Windows file names
@@ -23,6 +27,7 @@ def sanitize_folder_name(name):
         name = name.replace(char, '')
     return name
 
+
 def rename_folder_with_tmdb_id(folder_path, new_name, release_year, tmdb_id):
     base_folder = os.path.dirname(folder_path)
     new_folder_name = sanitize_folder_name(f"{new_name} ({release_year}) [tmdbid-{tmdb_id}]")
@@ -30,10 +35,12 @@ def rename_folder_with_tmdb_id(folder_path, new_name, release_year, tmdb_id):
     os.rename(folder_path, new_folder_path)
     return new_folder_path
 
+
 def mark_as_processed(file_path, folder_path):
     with open(file_path, mode='a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([folder_path])
+
 
 class TMDBApp:
     def __init__(self, root, folder_paths, processed_file):
@@ -42,7 +49,7 @@ class TMDBApp:
         self.processed_file = processed_file
         self.current_folder = None
         self.tmdb_results = None
-        self.image_cache = {}  # Cache to store thumbnails
+        self.image_cache = {}
         self.create_widgets()
 
     def create_widgets(self):
@@ -61,12 +68,11 @@ class TMDBApp:
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
         style = ttk.Style()
-        style.configure("Treeview", rowheight=80)  # Adjust the row height as needed
+        style.configure("Treeview", rowheight=80)
 
         self.spinner = tk.Label(self.root, text="Loading...", font=('Arial', 14), fg="blue")
         self.spinner.grid(row=3, column=0, pady=5, padx=5, sticky='ew')
 
-        # Create a frame for the buttons
         self.button_frame = tk.Frame(self.root)
         self.button_frame.grid(row=4, column=0, pady=5, padx=5, sticky='ew')
 
@@ -87,11 +93,11 @@ class TMDBApp:
         self.manual_search_button = tk.Button(self.button_frame, text="Manual Search", command=self.manual_search, font=('Arial', 12))
         self.manual_search_button.grid(row=0, column=3, padx=5, sticky='ew')
 
-        self.spinner.grid_remove()  # Hide spinner initially
+        self.spinner.grid_remove()
         self.next_folder()
 
     def on_select(self, event):
-        pass  # No need to handle selection for now
+        pass
 
     def next_folder(self):
         if not self.folder_paths:
@@ -103,64 +109,61 @@ class TMDBApp:
         if os.path.isdir(self.current_folder):
             folder_name = os.path.basename(self.current_folder)
             self.start_loading()
-            search_type = "tv" if "shows" in self.current_folder.lower() else "movie"
-            self.tmdb_results = get_tmdb_id(folder_name, search_type)
+            self.tmdb_results = get_tmdb_id(folder_name)
             self.stop_loading()
-            self.tree.delete(*self.tree.get_children())  # Clear the treeview
-            if self.tmdb_results:
-                max_name_length = 0
-                for result in self.tmdb_results:
-                    display_text = f"{result['name']} ({result['id']})"
-                    max_name_length = max(max_name_length, len(display_text))
-                    if 'poster_path' in result and result['poster_path']:
-                        img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
-                        response = requests.get(img_url)
-                        img_data = response.content
-                        img = Image.open(BytesIO(img_data))
-                        img = img.resize((50, 75), Image.LANCZOS)  # Resize for thumbnail
-                        img_tk = ImageTk.PhotoImage(img)
-                        self.image_cache[result['id']] = img_tk  # Cache the image
-                        self.tree.insert("", "end", iid=result['id'], text=display_text, image=img_tk)
-                    else:
-                        self.tree.insert("", "end", iid=result['id'], text=display_text)
-                # Adjust column width based on the longest name
-                self.tree.column("#0", width=max_name_length * 10)
+            self.populate_tree()
+
+    def populate_tree(self):
+        self.tree.delete(*self.tree.get_children())
+        if self.tmdb_results:
+            max_name_length = 0
+            for result in self.tmdb_results:
+                name = result.get('name', result.get('title', 'Unknown Title'))
+                description = result.get('overview', 'No description available.')
+                display_text = f"{name} ({result['id']})\n{description}"
+
+                max_name_length = max(max_name_length, len(name))
+
+                if 'poster_path' in result and result['poster_path']:
+                    img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
+                    response = requests.get(img_url)
+                    img_data = response.content
+                    img = Image.open(BytesIO(img_data))
+                    img = img.resize((50, 75), Image.LANCZOS)
+                    img_tk = ImageTk.PhotoImage(img)
+                    self.image_cache[result['id']] = img_tk  # Cache the image
+                    self.tree.insert("", "end", iid=result['id'], text=display_text, image=img_tk)
+                else:
+                    self.tree.insert("", "end", iid=result['id'], text=display_text)
+            self.tree.column("#0", width=max_name_length * 10)
+        else:
+            self.handle_error(os.path.basename(self.current_folder))
+
+    def handle_error(self, folder_name):
+        response = messagebox.askquestion(
+            "No Results Found",
+            f"No TMDB ID found for '{folder_name}'. Would you like to perform a manual search or skip?",
+            icon="warning"
+        )
+        if response == "yes":
+            self.manual_search()
+        else:
+            self.skip()
 
     def start_loading(self):
-        self.spinner.grid()  # Show the spinner
+        self.spinner.grid()
         self.root.update_idletasks()
 
     def stop_loading(self):
-        self.spinner.grid_remove()  # Hide the spinner
+        self.spinner.grid_remove()
 
     def manual_search(self):
         search_query = simpledialog.askstring("Manual Search", "Enter the name to search:")
         if search_query:
             self.start_loading()
-            search_type = "tv" if "shows" in search_query.lower() else "movie"
-            self.tmdb_results = get_tmdb_id(search_query, search_type)
+            self.tmdb_results = get_tmdb_id(search_query)
             self.stop_loading()
-            self.tree.delete(*self.tree.get_children())  # Clear the treeview
-            if self.tmdb_results:
-                max_name_length = 0
-                for result in self.tmdb_results:
-                    display_text = f"{result['name']} ({result['id']})"
-                    max_name_length = max(max_name_length, len(display_text))
-                    if 'poster_path' in result and result['poster_path']:
-                        img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
-                        response = requests.get(img_url)
-                        img_data = response.content
-                        img = Image.open(BytesIO(img_data))
-                        img = img.resize((50, 75), Image.LANCZOS)  # Resize for thumbnail
-                        img_tk = ImageTk.PhotoImage(img)
-                        self.image_cache[result['id']] = img_tk  # Cache the image
-                        self.tree.insert("", "end", iid=result['id'], text=display_text, image=img_tk)
-                    else:
-                        self.tree.insert("", "end", iid=result['id'], text=display_text)
-                # Adjust column width based on the longest name
-                self.tree.column("#0", width=max_name_length * 10)
-            else:
-                messagebox.showerror("Error", f"No TMDB ID found for '{search_query}'")
+            self.populate_tree()
 
     def make_selection(self):
         selection = self.tree.selection()
@@ -169,13 +172,13 @@ class TMDBApp:
             for result in self.tmdb_results:
                 if result['id'] == int(item_id):
                     tmdb_id = result['id']
-                    new_name = result['name']
-                    release_year = result.get('first_air_date', 'Unknown')[:4] if 'first_air_date' in result else result.get('release_date', 'Unknown')[:4]
+                    new_name = result.get('name', result.get('title'))
+                    release_year = result.get('first_air_date', result.get('release_date', 'Unknown'))[:4]
                     new_folder_path = rename_folder_with_tmdb_id(self.current_folder, new_name, release_year, tmdb_id)
                     mark_as_processed(self.processed_file, new_folder_path)
-                    print(f"Folder renamed to: {new_folder_path}")  # Replace the messagebox with print
+                    print(f"Folder renamed to: {new_folder_path}")
                     break
-            self.tree.selection_remove(item_id)  # Clear selection after making a selection
+            self.tree.selection_remove(item_id)
             self.next_folder()
 
     def mark_processed(self):
@@ -186,9 +189,10 @@ class TMDBApp:
     def skip(self):
         self.next_folder()
 
+
 def select_folders():
     FOLDER_PATHS = [
-        "D:/Media/Shows",  # Example folder paths, add more as needed
+        "D:/Media/Shows",
         "D:/Media/Movies",
         "E:/Media/Shows",
         "F:/Media/Movies"
@@ -213,6 +217,7 @@ def select_folders():
                     folder_paths.append(subfolder_path)
 
     return folder_paths, processed_file
+
 
 if __name__ == "__main__":
     root = tk.Tk()
