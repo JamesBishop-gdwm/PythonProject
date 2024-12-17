@@ -6,10 +6,10 @@ from tkinter import messagebox, ttk, simpledialog
 from PIL import Image, ImageTk
 from io import BytesIO
 
-TMDB_API_KEY = ''  # Replace with your TMDB API key
+TMDB_API_KEY = 'f0f356f9c383dc1097b9035f2431f4d0'  # Replace with your TMDB API key
 
-def get_tmdb_id(folder_name):
-    url = f'https://api.themoviedb.org/3/search/tv?api_key={TMDB_API_KEY}&query={folder_name}'
+def get_tmdb_id(folder_name, search_type="tv"):
+    url = f'https://api.themoviedb.org/3/search/{search_type}?api_key={TMDB_API_KEY}&query={folder_name}'
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
@@ -56,7 +56,7 @@ class TMDBApp:
         self.label = tk.Label(self.root, text="Select the correct TMDB ID:", font=('Arial', 14))
         self.label.grid(row=1, column=0, pady=5, padx=5, sticky='ew')
 
-        self.tree = ttk.Treeview(self.root, columns=("Thumbnail", "Name", "Description"), show="tree")
+        self.tree = ttk.Treeview(self.root, columns=("Thumbnail", "Name"), show="tree")
         self.tree.grid(row=2, column=0, pady=5, padx=5, sticky='nsew')
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
@@ -103,16 +103,14 @@ class TMDBApp:
         if os.path.isdir(self.current_folder):
             folder_name = os.path.basename(self.current_folder)
             self.start_loading()
-            self.tmdb_results = get_tmdb_id(folder_name)
+            search_type = "tv" if "shows" in self.current_folder.lower() else "movie"
+            self.tmdb_results = get_tmdb_id(folder_name, search_type)
             self.stop_loading()
             self.tree.delete(*self.tree.get_children())  # Clear the treeview
             if self.tmdb_results:
                 max_name_length = 0
                 for result in self.tmdb_results:
-                    description = result.get('overview', 'No description available.')
-                    if len(description) > 200:  # Limit the description length
-                        description = description[:197] + '...'
-                    display_text = f"{result['name']} ({result['id']})\n{description}"
+                    display_text = f"{result['name']} ({result['id']})"
                     max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
@@ -139,16 +137,14 @@ class TMDBApp:
         search_query = simpledialog.askstring("Manual Search", "Enter the name to search:")
         if search_query:
             self.start_loading()
-            self.tmdb_results = get_tmdb_id(search_query)
+            search_type = "tv" if "shows" in search_query.lower() else "movie"
+            self.tmdb_results = get_tmdb_id(search_query, search_type)
             self.stop_loading()
             self.tree.delete(*self.tree.get_children())  # Clear the treeview
             if self.tmdb_results:
                 max_name_length = 0
                 for result in self.tmdb_results:
-                    description = result.get('overview', 'No description available.')
-                    if len(description) > 200:  # Limit the description length
-                        description = description[:197] + '...'
-                    display_text = f"{result['name']} ({result['id']})\n{description}"
+                    display_text = f"{result['name']} ({result['id']})"
                     max_name_length = max(max_name_length, len(display_text))
                     if 'poster_path' in result and result['poster_path']:
                         img_url = f"https://image.tmdb.org/t/p/w500{result['poster_path']}"
@@ -174,7 +170,7 @@ class TMDBApp:
                 if result['id'] == int(item_id):
                     tmdb_id = result['id']
                     new_name = result['name']
-                    release_year = result.get('first_air_date', 'Unknown')[:4] if 'first_air_date' in result else 'Unknown'
+                    release_year = result.get('first_air_date', 'Unknown')[:4] if 'first_air_date' in result else result.get('release_date', 'Unknown')[:4]
                     new_folder_path = rename_folder_with_tmdb_id(self.current_folder, new_name, release_year, tmdb_id)
                     mark_as_processed(self.processed_file, new_folder_path)
                     print(f"Folder renamed to: {new_folder_path}")  # Replace the messagebox with print
@@ -193,7 +189,9 @@ class TMDBApp:
 def select_folders():
     FOLDER_PATHS = [
         "D:/Media/Shows",  # Example folder paths, add more as needed
-        "D:/Media/Movies"
+        "D:/Media/Movies",
+        "E:/Media/Shows",
+        "F:/Media/Movies"
     ]
     processed_file = 'already_processed.csv'
     processed_folders = set()
